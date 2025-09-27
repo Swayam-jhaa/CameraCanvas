@@ -1,6 +1,8 @@
 //import CameraCanvas from "@/app/component/CameraCanvas";
 
-import CameraCanvas from "@/components/ui/cameracanvas";
+import CameraCanvas from "../components/ui/cameracanvas";
+
+//import CameraCanvas from "@/components/ui/cameracanvas";
 
 export default function Page() {
   return (

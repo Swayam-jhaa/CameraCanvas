@@ -1,207 +1,231 @@
+// components/ui/cameracanvas.tsx
 "use client";
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import type { JSX } from "react";
 
-// Declare MediaPipe types
-declare global {
-  interface Window {
-    Hands: any;
-    Camera: any;
-  }
-}
+export default function CameraCanvas(): JSX.Element {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-export default function CameraCanvas() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
-  
   const lastPositionRef = useRef<{ x: number; y: number } | null>(null);
   const isDrawingRef = useRef<boolean>(false);
-  const handsRef = useRef<any>(null);
-  const cameraRef = useRef<any>(null);
-  
+  const handsRef = useRef<any | null>(null);
+  const cameraRef = useRef<any | null>(null);
+
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string>("");
 
-  // Load MediaPipe scripts
-  useEffect(() => {
-    const loadMediaPipe = async () => {
-      try {
-        // Load MediaPipe scripts
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js');
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js');
-        
-        setIsLoaded(true);
-      } catch (err) {
-        console.error('Failed to load MediaPipe:', err);
-        setError('Failed to load hand tracking. Please check your internet connection.');
-      }
-    };
-
-    loadMediaPipe();
-  }, []);
-
+  // Utility: load a script tag once
   const loadScript = (src: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      // Check if script is already loaded
+      // If already loaded, resolve
       if (document.querySelector(`script[src="${src}"]`)) {
         resolve();
         return;
       }
-
-      const script = document.createElement('script');
+      const script = document.createElement("script");
       script.src = src;
+      script.async = true;
       script.onload = () => resolve();
       script.onerror = () => reject(new Error(`Failed to load ${src}`));
       document.head.appendChild(script);
     });
   };
 
-  // Initialize MediaPipe Hands
+  // Load MediaPipe scripts (runs client-side)
   useEffect(() => {
-    if (!isLoaded || !videoRef.current || !canvasRef.current || !drawingCanvasRef.current) return;
+    let mounted = true;
+
+    const loadMediaPipe = async () => {
+      try {
+        await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js");
+        await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js");
+        await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js");
+
+        // Quick check: confirm classes are available on window
+        if (!(window as any).Hands || !(window as any).Camera) {
+          // Some CDNs may expose under different names; throw to show user friendly message
+          throw new Error("MediaPipe classes not found on window after script load.");
+        }
+
+        if (mounted) setIsLoaded(true);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load MediaPipe:", err);
+        if (mounted) {
+          setError("Failed to load hand tracking. Please check your internet connection.");
+        }
+      }
+    };
+
+    loadMediaPipe();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Initialize MediaPipe Hands once scripts are loaded
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!videoRef.current || !canvasRef.current || !drawingCanvasRef.current) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const drawingCanvas = drawingCanvasRef.current;
 
-    // Setup canvas dimensions
-    canvas.width = drawingCanvas.width = 1280;
-    canvas.height = drawingCanvas.height = 720;
+    // match desired resolution (you can adapt)
+    const W = 1280;
+    const H = 720;
+    canvas.width = drawingCanvas.width = W;
+    canvas.height = drawingCanvas.height = H;
 
-    const canvasCtx = canvas.getContext('2d')!;
-    const drawCtx = drawingCanvas.getContext('2d')!;
+    const canvasCtx = canvas.getContext("2d");
+    const drawCtx = drawingCanvas.getContext("2d");
+    if (!canvasCtx || !drawCtx) {
+      setError("Unable to get canvas contexts.");
+      return;
+    }
 
-    // Configure MediaPipe Hands
-    const hands = new window.Hands({
-      locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-    });
+    // Create Hands instance from window (type-cast to any)
+    try {
+      const HandsClass = (window as any).Hands;
+      const CameraClass = (window as any).Camera;
 
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.5,
-    });
-
-    hands.onResults((results: any) => {
-      // Clear overlay canvas
-      canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-        // No hands detected
-        lastPositionRef.current = null;
-        isDrawingRef.current = false;
-        return;
+      if (!HandsClass || !CameraClass) {
+        throw new Error("Hands or Camera is not available on window");
       }
 
-      const landmarks = results.multiHandLandmarks[0];
-      
-      // Get finger landmarks
-      const indexTip = landmarks[8];   // Index finger tip
-      const indexPip = landmarks[6];   // Index finger PIP joint
-      const middleTip = landmarks[12]; // Middle finger tip
-      const middlePip = landmarks[10]; // Middle finger PIP joint
+      const hands = new HandsClass({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      });
 
-      // Convert normalized coordinates to canvas coordinates (flip x for mirror)
-      const x = canvas.width - (indexTip.x * canvas.width);
-      const y = indexTip.y * canvas.height;
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.5,
+      });
 
-      // Gesture detection: index finger up, middle finger down
-      const indexUp = indexTip.y < indexPip.y;
-      const middleDown = middleTip.y > middlePip.y;
-      const isPointing = indexUp && middleDown;
+      hands.onResults((results: any) => {
+        // clear overlay canvas each frame
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw finger tip indicator
-      canvasCtx.fillStyle = isPointing ? '#00ff88' : '#ff6b6b';
-      canvasCtx.beginPath();
-      canvasCtx.arc(x, y, 10, 0, Math.PI * 2);
-      canvasCtx.fill();
+        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+          lastPositionRef.current = null;
+          isDrawingRef.current = false;
+          return;
+        }
 
-      // Draw status text
-      canvasCtx.fillStyle = 'white';
-      canvasCtx.font = 'bold 16px Arial';
-      canvasCtx.shadowColor = 'black';
-      canvasCtx.shadowBlur = 4;
-      canvasCtx.fillText(
-        isPointing ? '✏️ Drawing' : '👆 Point finger up to draw', 
-        x + 20, 
-        y - 10
-      );
-      canvasCtx.shadowBlur = 0;
+        const landmarks = results.multiHandLandmarks[0];
 
-      // Drawing logic
-      if (isPointing) {
-        drawCtx.strokeStyle = '#00ff88';
-        drawCtx.lineWidth = 5;
-        drawCtx.lineCap = 'round';
-        drawCtx.lineJoin = 'round';
-        drawCtx.shadowColor = '#00ff88';
-        drawCtx.shadowBlur = 2;
+        // landmark indices: 8 = index tip, 6 = index pip, 12 = middle tip, 10 = middle pip
+        const indexTip = landmarks[8];
+        const indexPip = landmarks[6];
+        const middleTip = landmarks[12];
+        const middlePip = landmarks[10];
 
-        if (lastPositionRef.current && isDrawingRef.current) {
-          // Draw line from last position to current
-          drawCtx.beginPath();
-          drawCtx.moveTo(lastPositionRef.current.x, lastPositionRef.current.y);
-          drawCtx.lineTo(x, y);
-          drawCtx.stroke();
+        // convert normalized coords to canvas coords; flip X for mirrored interaction
+        const x = canvas.width - indexTip.x * canvas.width;
+        const y = indexTip.y * canvas.height;
+
+        // gesture detection
+        const indexUp = indexTip.y < indexPip.y;
+        const middleDown = middleTip.y > middlePip.y;
+        const isPointing = indexUp && middleDown;
+
+        // debug indicator
+        canvasCtx.fillStyle = isPointing ? "#00ff88" : "#ff6b6b";
+        canvasCtx.beginPath();
+        canvasCtx.arc(x, y, 10, 0, Math.PI * 2);
+        canvasCtx.fill();
+
+        // status text
+        canvasCtx.fillStyle = "white";
+        canvasCtx.font = "bold 16px Arial";
+        canvasCtx.shadowColor = "black";
+        canvasCtx.shadowBlur = 4;
+        canvasCtx.fillText(isPointing ? "✏️ Drawing" : "👆 Point finger up to draw", x + 20, y - 10);
+        canvasCtx.shadowBlur = 0;
+
+        // drawing
+        if (isPointing) {
+          drawCtx.strokeStyle = "#00ff88";
+          drawCtx.lineWidth = 5;
+          drawCtx.lineCap = "round";
+          drawCtx.lineJoin = "round";
+          drawCtx.shadowColor = "#00ff88";
+          drawCtx.shadowBlur = 2;
+
+          if (lastPositionRef.current && isDrawingRef.current) {
+            drawCtx.beginPath();
+            drawCtx.moveTo(lastPositionRef.current.x, lastPositionRef.current.y);
+            drawCtx.lineTo(x, y);
+            drawCtx.stroke();
+            drawCtx.closePath();
+          } else {
+            drawCtx.beginPath();
+            drawCtx.arc(x, y, 3, 0, Math.PI * 2);
+            drawCtx.fill();
+          }
+          lastPositionRef.current = { x, y };
+          isDrawingRef.current = true;
         } else {
-          // Draw starting dot
-          drawCtx.beginPath();
-          drawCtx.arc(x, y, 3, 0, Math.PI * 2);
-          drawCtx.fill();
+          // pen up
+          lastPositionRef.current = null;
+          isDrawingRef.current = false;
         }
 
-        lastPositionRef.current = { x, y };
-        isDrawingRef.current = true;
-      } else {
-        // Pen up
-        lastPositionRef.current = null;
-        isDrawingRef.current = false;
-      }
-      
-      drawCtx.shadowBlur = 0;
-    });
+        drawCtx.shadowBlur = 0;
+      });
 
-    handsRef.current = hands;
+      handsRef.current = hands;
 
-    // Setup camera
-    const camera = new window.Camera(video, {
-      onFrame: async () => {
-        if (handsRef.current) {
-          await handsRef.current.send({ image: video });
-        }
-      },
-      width: canvas.width,
-      height: canvas.height,
-    });
+      // initialize Camera helper (MediaPipe camera_utils must be loaded)
+      const camera = new (window as any).Camera(video, {
+        onFrame: async () => {
+          try {
+            await handsRef.current?.send({ image: video });
+          } catch (e) {
+            // swallow occasional frame send errors
+            // eslint-disable-next-line no-console
+            console.error("hands.send error:", e);
+          }
+        },
+        width: canvas.width,
+        height: canvas.height,
+      });
 
-    cameraRef.current = camera;
+      cameraRef.current = camera;
+      camera.start().catch((err: any) => {
+        // eslint-disable-next-line no-console
+        console.error("Camera failed to start:", err);
+        setError("Camera access denied. Please allow camera permissions and refresh.");
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to initialize MediaPipe Hands:", e);
+      setError("Failed to initialize hand tracking.");
+    }
 
-    camera.start().catch((err: any) => {
-      console.error('Camera failed to start:', err);
-      setError('Camera access denied. Please allow camera permissions and refresh.');
-    });
-
-    // Cleanup function
+    // cleanup on unmount
     return () => {
       try {
-        if (cameraRef.current) {
-          cameraRef.current.stop();
-        }
-        if (handsRef.current) {
-          handsRef.current.close();
-        }
-      } catch (e) {
-        console.log('Cleanup error:', e);
-      }
+        cameraRef.current?.stop?.();
+      } catch {}
+      try {
+        handsRef.current?.close?.();
+      } catch {}
+      cameraRef.current = null;
+      handsRef.current = null;
     };
   }, [isLoaded]);
 
   const clearDrawing = useCallback(() => {
     const drawingCanvas = drawingCanvasRef.current;
     if (drawingCanvas) {
-      const ctx = drawingCanvas.getContext('2d');
+      const ctx = drawingCanvas.getContext("2d");
       ctx?.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
     }
     isDrawingRef.current = false;
@@ -214,10 +238,7 @@ export default function CameraCanvas() {
         <div className="text-center text-white p-6">
           <div className="text-red-400 text-2xl mb-4">⚠️ Error</div>
           <div className="mb-4">{error}</div>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition-colors"
-          >
+          <button onClick={() => window.location.reload()} className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition-colors">
             Refresh Page
           </button>
         </div>
@@ -239,39 +260,16 @@ export default function CameraCanvas() {
 
   return (
     <div className="relative h-full bg-black rounded-lg overflow-hidden border border-white/10">
-      {/* Video feed */}
-      <video
-        ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover"
-        autoPlay
-        playsInline
-        muted
-        style={{ transform: 'scaleX(-1)' }} // Mirror for natural interaction
-      />
-      
-      {/* Hand tracking overlay */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none"
-      />
-      
-      {/* Drawing layer */}
-      <canvas
-        ref={drawingCanvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none"
-      />
-      
-      {/* Controls */}
+      <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted style={{ transform: "scaleX(-1)" }} />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+      <canvas ref={drawingCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+
       <div className="absolute top-4 right-4 flex gap-3">
-        <button
-          onClick={clearDrawing}
-          className="bg-white/20 hover:bg-white/30 text-white px-6 py-3 rounded-lg backdrop-blur-sm transition-all duration-200 border border-white/20 font-medium"
-        >
+        <button onClick={clearDrawing} className="bg-white/20 hover:bg-white/30 text-white px-6 py-3 rounded-lg backdrop-blur-sm transition-all duration-200 border border-white/20 font-medium">
           🗑️ Clear
         </button>
       </div>
-      
-      {/* Instructions */}
+
       <div className="absolute bottom-4 left-4 bg-black/70 text-white px-6 py-4 rounded-lg backdrop-blur-sm border border-white/20">
         <div className="text-sm space-y-2">
           <div className="text-green-400 font-medium">✓ Index finger up + middle down = Draw</div>
@@ -280,7 +278,6 @@ export default function CameraCanvas() {
         </div>
       </div>
 
-      {/* Performance indicator */}
       <div className="absolute top-4 left-4 bg-black/50 text-white px-3 py-2 rounded-lg backdrop-blur-sm border border-white/20">
         <div className="text-xs text-green-400">🟢 AI Tracking Active</div>
       </div>
