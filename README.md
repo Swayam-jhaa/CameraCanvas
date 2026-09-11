@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CameraCanvas — In-Air Hand Gesture Virtual Whiteboard
 
-## Getting Started
+<div align="center">
 
-First, run the development server:
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-00F5D4?style=for-the-badge&logo=vercel&logoColor=black)](https://camera-canvas.vercel.app)
+[![Next.js](https://img.shields.io/badge/Next.js_15-Turbopack-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React_19-TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![MediaPipe](https://img.shields.io/badge/Google-MediaPipe_Hands-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://developers.google.com/mediapipe)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+**Interactive in-browser air-drawing whiteboard powered by Google MediaPipe computer vision hand tracking and HTML5 Canvas.**
+
+[🌐 Try the Live Whiteboard](https://camera-canvas.vercel.app)
+
+</div>
+
+---
+
+## 🖐️ Overview
+
+**CameraCanvas** transforms any standard webcam into a touchless, in-air drawing tablet. Using **Google MediaPipe Hands**, it tracks 21 three-dimensional skeletal hand landmarks in real time directly inside the browser at 60 FPS — requiring zero external hardware, styluses, or special sensors.
+
+### Highlights:
+- **Zero-Latency In-Browser Vision**: Client-side inference via WebGL-accelerated MediaPipe pipelines.
+- **Pinch-to-Draw Interaction**: Pinches between the thumb and index fingertip trigger real-time stroke interpolation; releasing the pinch suspends drawing.
+- **Dual-Layer Canvas Architecture**:
+  - *Skeletal Layer*: Displays real-time 21-point hand skeleton, tracking confidence, and active cursor feedback.
+  - *Persistent Drawing Layer*: Retains vector-smooth freehand illustrations, annotations, and colored brush strokes.
+- **Dark Mode Studio UI**: Clean, distraction-free creative interface designed for digital presentations, teaching, and gesture experimentation.
+
+---
+
+## 🏗️ Architecture
+
+```
+                    +------------------------+
+                    |     Webcam Stream      |
+                    +-----------+------------+
+                                |
+                                v
+                    +------------------------+
+                    | Google MediaPipe Hands |  (21 3D Landmarks @ 60 FPS)
+                    +-----------+------------+
+                                |
+                    +-----------+------------+
+                    | Pinch Distance Engine  |  (Euclidean ||Index - Thumb|| < Threshold)
+                    +-----------+------------+
+                                |
+                +---------------+---------------+
+                |                               |
+                v                               v
+    +-----------------------+       +-----------------------+
+    | Skeletal Guide Canvas |       | Persistent Ink Canvas |
+    | (Real-time Hand Mesh) |       | (Exportable Artwork)  |
+    +-----------------------+       +-----------------------+
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 💻 Tech Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Framework**: Next.js 15 (App Router with Turbopack)
+- **Library**: React 19, TypeScript 5
+- **Vision Inference**: Google MediaPipe Hands (`@mediapipe/camera_utils`, `@mediapipe/hands`)
+- **Styling**: Tailwind CSS v4, Lucide Icons, Radix UI Primitives
+- **Deployment**: Vercel Edge
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🚀 Getting Started
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Prerequisites
+- Node.js 18.18+ or 20+
+- Modern browser with WebRTC webcam permissions (Chrome, Edge, Safari, Firefox)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 1. Installation
+```bash
+git clone https://github.com/Swayam-jhaa/CameraCanvas.git
+cd CameraCanvas
 
-## Deploy on Vercel
+npm install
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 2. Run Development Server
+```bash
+npm run dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open `http://localhost:3000` in your browser and allow camera permissions when prompted.
+
+---
+
+## 🎮 How to Use
+
+1. **Position Your Hand**: Hold your hand 1.5 to 3 feet in front of your camera.
+2. **Pinch to Draw**: Bring your index finger and thumb tips close together (`pinch`) to start laying down ink.
+3. **Move to Sketch**: Move your pinched fingers in mid-air to draw lines and curves.
+4. **Release**: Separate your fingers to stop drawing and move your hand freely across the canvas.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
